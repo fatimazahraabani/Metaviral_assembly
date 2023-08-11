@@ -69,8 +69,5 @@ The workflow generates the following output:
 
 ## Contact Information
 
-For any questions or issues related to this workflow, please contact [your contact email/username].
+For any questions or issues related to this workflow, please contact abanifatimazahra@gmail.com
 
----
-
-Please adjust the contact information and other details as needed. The above Readme provides a general overview of the workflow and its usage, making it easier for users to understand and run the Snakefile.x
