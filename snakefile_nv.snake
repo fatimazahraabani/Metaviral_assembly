@@ -1,0 +1,255 @@
+#-------------------------------------------------Importing the necessary modules------------------------------------------------------#
+import os
+import subprocess
+from snakemake.utils import report
+import yaml
+import glob
+from snakemake.shell import shell
+
+#----------------------------------------------------------config-file-----------------------------------------------------------------#
+
+configfile: "/shared/home/fabani/virmetaassembly/snakemake/cluster.json"
+path_data = "/shared/home/fabani/virmetaassembly/snakemake/data"
+path_results = "/shared/home/fabani/virmetaassembly/snakemake"
+
+#------------------------------------------------------------Samples-------------------------------------------------------------------#
+
+samples, = glob_wildcards("data/{sample}_1.fastq")
+assembleurs = ['Megahit','Metaviralspades','Rnaspades'] # ,'Spades','Metaspades'
+#R1 = expand("data/{sample}_1.fastq", sample=samples.sample)
+#R2 = lambda wildcards: "data/{sample}_2.fastq".format(sample=wildcards.sample)clear
+
+#-------------------------------------------------------Règles cibles------------------------------------------------------------------#
+
+# Define the target rule
+rule all:
+    input:
+        expand("results/{assembleur}_quast_report", assembleur=assembleurs),
+        expand("results/{assembleur}_diamond_alignment.tsv",  assembleur=assembleurs),
+	expand("results/{assembleur}_chimere.pdf", assembleur=assembleurs),
+	expand("results/{assembleur}_rdrp_results.txt", assembleur=assembleurs),
+	expand("results/{assembleur}_hmm_results.txt", assembleur=assembleurs)
+    # output:
+    #     touch("DONE.txt")
+    
+#---------------------------------------------------Mapping des assemblages sur le génome humain--------------------------------#
+rule bwa_mapping:
+    input:
+        reference_genome="/shared/home/fabani/virmetaassembly/snakemake/reference/GCF_016801865.2_TS_CPP_V2_genomic.fasta",
+        R1=expand("data/{sample}_1.fastq", sample=samples),
+        R2= expand("data/{sample}_2.fastq", sample=samples)
+    output:
+        mapped_sam="results/{sample}_bwa_mapped.sam",
+        new_R1 = "results/new_fastq/{sample}_filtred_R1.fastq",
+        new_R2 = "results/new_fastq/{sample}_filtred_R2.fastq"
+    envmodules:
+    	"bwa-0.7.17", "picard/2.23.5"
+    shell:
+        """
+        bwa index {input.reference_genome}
+        bwa mem -t 4 {input.reference_genome} {input.R1} {input.R2} 2> {log} | samtools view -f 0x4 -> {output.mapped_sam}
+        picard  SamToFastq VALIDATION_STRINGENCY=SILENT I={output.mapped_sam} F={output.new_R1} F2={output.new_R2}
+        """
+
+# Mapping + extract reads :  bwa mem -t {threads} {input.host} {input.pairs_R1} {input.pairs_R2} 2> {log} | samtools view -b -  | tee {output.bam_pairs} |  samtools view -f 0x4 -> {output.sam_pairs}
+
+#-----------------------------------------------------Tri des fichiers FASTQ paired-end-------------------------------------------------#
+
+rule sort_fastq:
+    input:
+        R1= rules.bwa_mapping.output.new_R1,
+        R2= rules.bwa_mapping.output.new_R2
+    output:
+        sorted_R1="data/sorted_{sample}_1.fastq",
+        sorted_R2="data/sorted_{sample}_2.fastq"
+    shell:
+        """
+        paste - - - - < {input.R1} | sort -k1,1 -t " " | tr "\t" "\n" > {output.sorted_R1}
+        paste - - - - < {input.R2} | sort -k1,1 -t " " | tr "\t" "\n" > {output.sorted_R2}
+        """
+        
+#---------------------------------------------------Concaténation des fichiers FASTQ------------------------------------------------#
+rule concatenate_fastq:
+    input:
+        R1=  expand(rules.bwa_mapping.output.new_R1,sample=samples),
+        R2=  expand(rules.bwa_mapping.output.new_R2,sample=samples)
+    output:
+        concatenated_R1="data/ARBO_concatenated_R1.fastq",
+	    concatenated_R2="data/ARBO_concatenated_R2.fastq"
+    shell:
+        """
+        cat {input.R1} > {output.concatenated_R1} 
+        cat {input.R2} > {output.concatenated_R2}
+        """
+#-----------------------------------------------------------Assemblages---------------------------------------------------------------#
+
+rule megahit_assembly:
+    input:
+        R1 = expand(rules.concatenate_fastq.output.concatenated_R1 ,sample=samples),
+        R2 = expand(rules.concatenate_fastq.output.concatenated_R2,sample=samples),
+    output:
+        assembly = "results/Megahit_assembly.fasta"
+    envmodules:
+        "megahit/1.2.9"
+    shell:
+        """
+        megahit -1 {input.R1} -2 {input.R2} -o {output.assembly}
+        """
+
+rule spades_assembly:
+    input:
+        R1 = expand(rules.concatenate_fastq.output.concatenated_R1,sample=samples),
+        R2 = expand(rules.concatenate_fastq.output.concatenated_R2,sample=samples)
+    output:
+        assembly = "results/Spades_assembly.fasta"
+    envmodules:
+    	"spades/3.15.5"
+    shell:
+        """
+        spades.py -1 {input.R1} -2 {input.R2} -o {output.assembly}
+        """
+
+rule metaspades_assembly:
+    input:
+        R1 = expand(rules.concatenate_fastq.output.concatenated_R1,sample=samples),
+        R2 = expand(rules.concatenate_fastq.output.concatenated_R2,sample=samples)
+    output:
+        assembly = "results/Metaspades_assembly.fasta"
+    envmodules:
+    	"spades/3.15.5"
+    shell:
+        """
+        metaspades.py -1 {input.R1} -2 {input.R2} -o {output.assembly}
+        """
+
+rule metaviralspades_assembly:
+    input:
+        R1 = expand(rules.concatenate_fastq.output.concatenated_R1,sample=samples),
+        R2 = expand(rules.concatenate_fastq.output.concatenated_R2,sample=samples)
+    output:
+        assembly = "results/Metaviralspades_assembly.fasta"
+    envmodules:
+    	"spades/3.15.5"
+    shell:
+        """
+        metaviralspades.py -1 {input.R1} -2 {input.R2} -o {output.assembly}
+        """
+
+rule rnaspades_assembly:
+    input:
+        R1 = expand(rules.concatenate_fastq.output.concatenated_R1,sample=samples),
+        R2 = expand(rules.concatenate_fastq.output.concatenated_R2,sample=samples)
+    output:
+        assembly = "results/Rnaspades_assembly.fasta"
+    envmodules:
+    	"spades/3.15.5"
+    shell:
+        """
+        rnaspades.py -1 {input.R1} -2 {input.R2} -o {output.assembly}
+        """
+
+#-------------------------------------------------------Optimisation de l'assemblage----------------------------------------------------#
+
+rule cap3_optimization:
+    input:
+        assembly = "results/{assembleur}_assembly.fasta"
+    output:
+        optimized_assembly = "results/{assembleur}_optimized_assembly.fasta"
+    envmodules:
+    	"cap3-10.2011"
+    shell:
+        """
+        cap3 {input.assembly} > {output.optimized_assembly}
+        """
+
+#------------------------------------------------------------QUAST Evaluation----------------------------------------------------------#
+
+rule quast_evaluation:
+    input:
+        assembly = rules.cap3_optimization.output.optimized_assembly
+    output:
+        quast_report = "results/{assembleur}_quast_report"
+    envmodules:
+        "quast/5.0.2"
+    shell:
+        """
+        quast.py {input.assembly} -o {output.quast_report}
+        """
+
+#-----------------------------------------------------------Diamond Alignment----------------------------------------------------------#
+
+rule diamond_alignment:
+    input:
+        assembly = rules.cap3_optimization.output.optimized_assembly
+    output:
+        alignment = "results/{assembleur}_diamond_alignment.tsv"
+    envmodules:
+    	"diamond"
+    shell:
+        """
+        diamond blastx -b 10.0 -c 1 -p 16 -d /shared/ifbstor1/bank/nr/current/diamond/nr --taxonmap prot.accession2taxid.gz --more-sensitive --query {input.assembly} --max-hsps 1 --max-target-seqs 5 -f 6 qseqid sseqid qlen slen length qstart qend sstart send qcovhsp pident evalue bitscore staxids --out {output.alignment}
+        """
+        
+#-----------------------------------------------------------Blastn Alignment----------------------------------------------------------#
+rule blastn_alignment:
+    input:
+        assembly = rules.cap3_optimization.output.optimized_assembly
+    output:
+        blastn_results = "results/{assembleur}_blastn_results.tsv"
+    params:
+        blast_db = "/shared/ifbstor1/bank/nt/current/blast/nt"
+    threads: 4
+    envmodules:
+        "blast"
+    shell:
+        """
+        blastn -task blastn -db {params.blast_db} -query {input.assembly} -num_threads {threads} -evalue 0.001 -max_hsps 5 -outfmt "6 qseqid sseqid qlen slen length qstart qend sstart send qcovhsp pident evalue bitscore" -out {output.blastn_results}
+        """
+#-----------------------------------------------------------Recherche des chimeres--------------------------------------------------#
+rule chimere_detection:
+    input:
+        blastn_results = rules.blastn_alignment.output.alignment,
+    output:
+        chimere = "results/{assembleur}_chimere.pdf"
+    shell:
+        """
+        ./chimere.py -b {input.blastn_results} -o {output.chimere}
+        """
+#-----------------------------------------------------------Recherche des ORFs------------------------------------------------------#
+
+rule find_orfs:
+    input:
+        assembly = rules.cap3_optimization.output.optimized_assembly
+    output:
+        orf_results = "results/{assembleur}_orf_results.fasta"
+    shell:
+        "./orf.py -f {input.assembly} -o {output.orf_results}"
+        
+#-----------------------------------------------------------RdRp scan FASTA--------------------------------------------------------#
+
+rule rdrp_scan:
+    input:
+        orf_results = rules.find_orfs.output.orf_results,
+        rdrp_model = "/shared/home/fabani/virmetaassembly/assemblage_virale/fasta_rdrp_scan_database/RdRp-scan_0.90.fasta"  
+    output:
+        rdrp_results = "results/{assembleur}_rdrp_results.txt"
+    envmodules:
+    	"diamond"
+    shell:
+        """
+        diamond blastp --query {input.orf_results} --db {input.rdrp_model} --out {output.rdrp_results} --min-orf 600 --evalue 1e-5 --very-sensitive --outfmt 6
+        """
+#-----------------------------------------------------------RdRp scan HMM--------------------------------------------------------#
+rule rdrp_hmm_search:
+    input:
+        orf_results = rules.find_orfs.output.orf_results,
+        hmm_profile = "/shared/home/fabani/virmetaassembly/assemblage_virale/hmm_rdrp_scan_database/RdRp_HMM_profile_CLUSTALO.db"
+    output:
+        hmm_results = "results/{assembleur}_hmm_results.txt"
+    envmodules:
+    	"hmmer"
+    shell:
+        """
+        hmmsearch --tblout {output.hmm_results} {input.hmm_profile} {input.orf_results}
+        """
+

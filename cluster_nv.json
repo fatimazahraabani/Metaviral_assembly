@@ -1,0 +1,95 @@
+{
+    "Project_Title": "Benchmark_assemblers",
+    "author": "Fatima-Zahra ABANI",
+    "email": "fatima-zahra.abani@cirad.fr",
+    "institute": "CIRAD",
+    "Path-data": "/home/abani/snakemake",
+    "__default__": {
+        "job-name": "{rule}",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "1",
+        "log": "cluster_log/{rule}_%j.out",
+        "mem": "10G"
+    },
+    "Assemblage_Megahit": {
+        "job-name": "{rule}",
+        "megahit_version": "1.2.9",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "4",
+        "mem": "50G",
+        "log": "/shared/home/fabani/virmetaassembly/snakemake/log_folder"
+    },
+    "Assemblage_Spades": {
+        "job-name": "{rule}",
+        "spades_version": "3.15.5",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "16",
+        "mem": "250G",
+        "log": "/shared/home/fabani/virmetaassembly/snakemake/log_folder"
+    },
+    "Assemblage_Metaviralspades": {
+        "job-name": "{rule}",
+        "spades_version": "3.15.5",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "16",
+        "mem": "250G",
+        "log": "/shared/home/fabani/virmetaassembly/snakemake/log_folder"
+    },
+    "Assemblage_RnaSpades": {
+        "job-name": "{rule}",
+        "spades_version": "3.15.5",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "16",
+        "mem": "250G",
+        "log": "/shared/home/fabani/virmetaassembly/snakemake/log_folder"
+    },
+    "Assemblage_Cap3": {
+        "job-name": "{rule}",
+        "cap3_version": "10.2011",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "10"
+    },
+    "Alignement_diamond": {
+        "job-name": "{rule}",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "16",
+        "mem": "100G"
+    },
+    "Alignement_bwa": {
+        "job-name": "{rule}",
+        "bwa_version": "0.7.17",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "16",
+        "mem": "100G"
+    },
+    "Search_RdRp_Diamond": {
+        "job-name": "{rule}",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "4",
+        "mem": "16G"
+    },
+    "Search_RdRp_HMM": {
+        "job-name": "{rule}",
+        "queue": "long",
+        "nodes": "1",
+        "cpu_task": "8",
+        "mem": "16G"
+    },
+    "Chimere_Detection": {
+        "job-name": "{rule}",
+        "queue": "fast",
+        "nodes": "1",
+        "cpu_task": "8",
+        "mem": "16G"
+    }
+}
+
